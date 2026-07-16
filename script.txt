@@ -1,0 +1,9 @@
+    MOV A 10
+start:
+    JZ A end
+    PRINT A
+    SUB A 1
+    JMP start
+end:
+    MOV A 0
+    PRINT A
