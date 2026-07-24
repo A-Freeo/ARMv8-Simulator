@@ -1,15 +1,14 @@
-    MOV X0 10
-    MOV X1 0
-    STR X0 X1
+    SUB SP, 4
+    MOV X0, 10
+    STR X0, SP
 start:
-    CBZ X0 end
+    CBZ X0, end
     PRINT X0
-    SUB X0 1
-    ADD X1 1
-    STR X0 X1
+    ADD SP, 1
+    STR X0, SP
     B start
 end:
-    MOV X0 0
+    MOV X0, 0
     PRINT X0
-    DUMP 0 X1
+    DUMP 0, 10
 
