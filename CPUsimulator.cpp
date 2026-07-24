@@ -5,6 +5,7 @@
 #include <vector>
 #include <map>
 #include <cstdlib>
+#include <iomanip>
 using namespace std;
 
 // Commands
@@ -21,7 +22,7 @@ enum class OperandType {
 struct Operand {
     OperandType type = OperandType::NONE;
     string reg;
-    int imm = 0;
+    uint64_t imm = 0;
     string label;
 
     int resolvedTarget = -1;   // only used for LABEL operands
@@ -30,9 +31,10 @@ struct Operand {
 
 // Whole instruction, holds up to 1 operand, and 2 arguments (in current setup)
 // e.g of issues with current setup
-// e.g. str x0, [sp, #3] <- no way of taking in SP/register + # memory 
-// e.g. ldr x0, [sp, #10]
+// e.g. str x0, [sp, #3] <- no way of taking in SP/register + # memory !! now sp is useable but needs lsl operator ability 
+// e.g. ldr x0, [sp, #10] same for this
 // movz x0, 0xXXXX. mov x0, 0xXXXX, lsl #16 ... lsl #32... lsl #48 (fills whole 8 bit register) <- no way of taking in 3 arguments
+// need to make add / sub 3 operand
 struct Instruction {
     Opcode op;
     Operand arg1;
@@ -54,6 +56,7 @@ public:
         Program program;
         ifstream inputfile(path);
         string line;
+
 
         while (getline(inputfile, line)) {
             istringstream lineStream(line);
@@ -102,15 +105,20 @@ private:
             case Opcode::STR: {
                 string regStr, addrStr;
                 lineStream >> regStr >> addrStr;
+                regStr = sanitize(regStr);
+                addrStr = sanitize(addrStr);
                 instr.arg1.type = OperandType::REGISTER;
                 instr.arg1.reg = regStr;
 
                 if (!addrStr.empty() && addrStr[0] == 'X') {
                     instr.arg2.type = OperandType::REGISTER;
                     instr.arg2.reg = addrStr;
-                } else {
+                } else if (!addrStr.empty() && addrStr == "SP"){
+                    instr.arg2.type = OperandType::REGISTER;
+                    instr.arg2.reg = addrStr;
+                }else{
                     instr.arg2.type = OperandType::IMMEDIATE;
-                    instr.arg2.imm = stoi(addrStr);
+                    instr.arg2.imm = stoull(addrStr);
                 }
                 break;
             }
@@ -119,15 +127,21 @@ private:
             case Opcode::SUB: {
                 string regStr, operandStr;
                 lineStream >> regStr >> operandStr;
+                regStr = sanitize(regStr);
+                operandStr = sanitize(operandStr);
                 instr.arg1.type = OperandType::REGISTER;
                 instr.arg1.reg = regStr;
 
                 if (!operandStr.empty() && operandStr[0] == 'X') {
                     instr.arg2.type = OperandType::REGISTER;
                     instr.arg2.reg = operandStr;
-                } else {
+                } else if(!operandStr.empty() && operandStr == "SP"){
+                    instr.arg2.type = OperandType::REGISTER;
+                    instr.arg2.reg = operandStr; 
+                }
+                else{
                     instr.arg2.type = OperandType::IMMEDIATE;
-                    instr.arg2.imm = stoi(operandStr);
+                    instr.arg2.imm = stoull(operandStr);
                 }
                 break;
             }
@@ -136,15 +150,17 @@ private:
             case Opcode::MOV: {
                 string destStr, srcStr;
                 lineStream >> destStr >> srcStr;
+                destStr = sanitize(destStr);
+                srcStr = sanitize(srcStr);
                 instr.arg1.type = OperandType::REGISTER;
                 instr.arg1.reg = destStr;
 
-                if (!srcStr.empty() && srcStr[0] == 'X') {
+                if (!srcStr.empty() && srcStr[0] == 'X' || srcStr == "SP") {
                     instr.arg2.type = OperandType::REGISTER;
                     instr.arg2.reg = srcStr;
                 } else {
                     instr.arg2.type = OperandType::IMMEDIATE;
-                    instr.arg2.imm = stoi(srcStr);
+                    instr.arg2.imm = stoull(srcStr);
                 }
                 break;
             }
@@ -152,6 +168,7 @@ private:
             case Opcode::PRINT: {
                 string regStr;
                 lineStream >> regStr;
+                regStr = sanitize(regStr);
                 instr.arg1.type = OperandType::REGISTER;
                 instr.arg1.reg = regStr;
                 break;
@@ -160,6 +177,8 @@ private:
             case Opcode::CBZ: {
                 string regStr, labelStr;
                 lineStream >> regStr >> labelStr;
+                regStr = sanitize(regStr);
+                labelStr = sanitize(labelStr);
                 instr.arg1.type = OperandType::REGISTER;
                 instr.arg1.reg = regStr;
                 instr.arg2.type = OperandType::LABEL;
@@ -170,6 +189,7 @@ private:
             case Opcode::B: {
                 string labelStr;
                 lineStream >> labelStr;
+                labelStr = sanitize(labelStr);
                 instr.arg1.type = OperandType::LABEL;
                 instr.arg1.label = labelStr;
                 break;
@@ -178,13 +198,14 @@ private:
             case Opcode::DUMP: {
                 string startStr, endStr;
                 lineStream >> startStr >> endStr;
-
+                startStr = sanitize(startStr);
+                endStr = sanitize(endStr);
                 if (!startStr.empty() && startStr[0] == 'X') {
                     instr.arg1.type = OperandType::REGISTER;
                     instr.arg1.reg = startStr;
                 } else {
                     instr.arg1.type = OperandType::IMMEDIATE;
-                    instr.arg1.imm = stoi(startStr);
+                    instr.arg1.imm = stoull(startStr);
                 }
 
                 if (!endStr.empty() && endStr[0] == 'X') {
@@ -192,7 +213,7 @@ private:
                     instr.arg2.reg = endStr;
                 } else {
                     instr.arg2.type = OperandType::IMMEDIATE;
-                    instr.arg2.imm = stoi(endStr);
+                    instr.arg2.imm = stoull(endStr);
                 }
                 break;
             }
@@ -217,6 +238,17 @@ private:
             }
         }
     }
+
+    string sanitize(string str){
+        string clean = "";
+        for(char c : str){
+        if (c != ',' && c != '[' && c != ']' && c != '#') {
+            clean += c;
+        }
+
+        }
+        return clean;
+    }
 };
 
 
@@ -225,20 +257,34 @@ private:
 // Backing store for LDR/STR, addressed by immediate offset
 class Memory {
     private:
-        int cells[256] = {0};
+        uint8_t bytes[64] = {0};
+        // 512 bits - > 64 bytes - > 8 int-64
+        // has memory adress 0 - 31 (1 index value = 1 byte)
     public:
-        int read(int addr) {return cells[addr]; }
-        void write(int addr, int value) { cells[addr] = value; }
+        static constexpr int SIZE = 64;
+        uint64_t read(int addr){
+
+            uint64_t value;
+            memcpy(&value, &bytes[addr], sizeof(uint64_t));
+            return value;
+
+        }
+
+        void write(int addr, uint64_t value){
+
+            memcpy(&bytes[addr], &value, sizeof(uint64_t));
+
+        }
 };
 
 // General-purpose register file, addressed by name (e.g. "X0")
 class Registers {
     private:
-        map<string, int> values;
+        map<string, uint64_t> values;
     public:
-        int get(const string& reg) { return values[reg]; }
+        uint64_t get(const string& reg) { return values[reg]; }
 
-        void set(const string& reg, int value) { values[reg] = value; }
+        void set(const string& reg, uint64_t value) { values[reg] = value; }
 };
 // -------------------------------------
 
@@ -246,6 +292,7 @@ class Registers {
 
 class CPU {
     private:
+
         void execute(const Instruction& instr) {
             // run each insrutction, this gets looped
             switch (instr.op) {
@@ -263,13 +310,14 @@ class CPU {
                     int addr = (instr.arg2.type == OperandType::REGISTER)
                         ? registers.get(instr.arg2.reg)
                         : instr.arg2.imm;
+                    
                     memory.write(addr, registers.get(instr.arg1.reg));
                     break;
                 }
 
                 case Opcode::ADD: {
                 // gets the register or immediate value of arg 2 and sets the register at arg1 its self + value
-                    int operandValue = (instr.arg2.type == OperandType::REGISTER)
+                    uint64_t operandValue = (instr.arg2.type == OperandType::REGISTER)
                         ? registers.get(instr.arg2.reg)
                         : instr.arg2.imm;
                     registers.set(instr.arg1.reg, registers.get(instr.arg1.reg) + operandValue);
@@ -278,7 +326,7 @@ class CPU {
 
                 case Opcode::SUB: {
                 // same as ADD but subtraction
-                    int operandValue = (instr.arg2.type == OperandType::REGISTER)
+                    uint64_t operandValue = (instr.arg2.type == OperandType::REGISTER)
                         ? registers.get(instr.arg2.reg)
                         : instr.arg2.imm;
                     registers.set(instr.arg1.reg, registers.get(instr.arg1.reg) - operandValue);
@@ -287,7 +335,7 @@ class CPU {
         
                 case Opcode::MOV: {
                     // gets the register or immediate value and sets the register at arg1 to that value
-                    int operandValue = (instr.arg2.type == OperandType::REGISTER)
+                    uint64_t operandValue = (instr.arg2.type == OperandType::REGISTER)
                         ? registers.get(instr.arg2.reg)
                         : instr.arg2.imm;
                     registers.set(instr.arg1.reg, operandValue);
@@ -319,9 +367,15 @@ class CPU {
                     int end = (instr.arg2.type == OperandType::REGISTER)
                         ? registers.get(instr.arg2.reg)
                         : instr.arg2.imm;
-                    for (int i = start; i <= end; i++) {
-                        cout << "Memory[" << i << "] = " << memory.read(i) << endl;
+
+                    cout << "Memory[" << start << " to " << end << "] = 0x";
+                    for (int i = start; i < end && i < Memory::SIZE; i++) { 
+                        uint64_t fullByte = memory.read(i); 
+
+                        int byteValue = fullByte & 0xFF;
+                        cout << uppercase << hex << setfill('0') << setw(2) << byteValue << " ";
                     }
+                    cout << dec << endl;
                     break;
                 }
 
@@ -349,6 +403,8 @@ class CPU {
                 execute(program.instructions[pc]);
             }
         }
+        CPU(){ registers.set("SP", Memory::SIZE);
+ }
 };
 
 
@@ -356,7 +412,7 @@ class CPU {
 
 int main() {
     Parser parser; // takes in script / file
-    Program program = parser.parse("script.txt"); // program holds finished commands
+    Program program = parser.parse("script2.txt"); // program holds finished commands
 
     // cpu runs the program
     CPU cpu;
