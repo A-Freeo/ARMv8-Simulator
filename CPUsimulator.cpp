@@ -10,7 +10,7 @@ using namespace std;
 
 // Commands
 enum class Opcode {
-    LDR, STR, ADD, SUB, MOV, MOVZ, MOVK ,PRINT, CBZ, B, DUMP, HLT
+    LDR, STR, ADD, SUB, MOV, MOVZ, MOVK ,PRINT, CBZ, CMP, B, DUMP, HLT
 };
 
 // Types of orerands
@@ -28,6 +28,8 @@ struct Operand {
     int resolvedTarget = -1;   // only used for LABEL operands
 };
 
+// stoull(endStr, nullptr, 0); 
+//        string, when to stop consuming, base (0 makes it snip the prefix)
 
 // Whole instruction, holds up to 1 operand, and 2 arguments (in current setup)
 // e.g of issues with current setup
@@ -42,6 +44,7 @@ struct Instruction {
     Operand arg3;
     string shiftType;
     uint64_t shiftImm; 
+    string cmpType;
 };
 
 // Holds the parsed instructions plus a label -> instruction index map used to resolve branches
@@ -96,7 +99,9 @@ private:
         else if (opcodeStr == "MOVK")  instr.op = Opcode::MOVK;
         else if (opcodeStr == "PRINT") instr.op = Opcode::PRINT;
         else if (opcodeStr == "CBZ")    instr.op = Opcode::CBZ;
+        else if (opcodeStr == "CMP")    instr.op = Opcode::CMP;
         else if (opcodeStr == "B")   instr.op = Opcode::B;
+        else if (opcodeStr[0] == 'B')   instr.op = Opcode::B;
         else if (opcodeStr == "DUMP")  instr.op = Opcode::DUMP;
         else if (opcodeStr == "HLT")  instr.op = Opcode::HLT;
         else {
@@ -108,23 +113,82 @@ private:
             // Both take a register followed by an address, either a register or an immediate
             case Opcode::LDR:
             case Opcode::STR: {
-                string regStr, addrStr;
+                string regStr, addrStr, t3, t4, t5; 
                 lineStream >> regStr >> addrStr;
-                regStr = sanitize(regStr);
-                addrStr = sanitize(addrStr);
-                instr.arg1.type = OperandType::REGISTER;
-                instr.arg1.reg = regStr;
 
-                if (!addrStr.empty() && addrStr[0] == 'X') {
-                    instr.arg2.type = OperandType::REGISTER;
-                    instr.arg2.reg = addrStr;
-                } else if (!addrStr.empty() && addrStr == "SP"){
-                    instr.arg2.type = OperandType::REGISTER;
-                    instr.arg2.reg = addrStr;
-                }else{
-                    instr.arg2.type = OperandType::IMMEDIATE;
-                    instr.arg2.imm = stoull(addrStr, nullptr, 0);
+                regStr = sanitize(regStr); 
+                addrStr = sanitize(addrStr); 
+
+                instr.arg1.type = OperandType::REGISTER; 
+                instr.arg1.reg = regStr; 
+
+                if (lineStream >> t3) {
+                    t3 = sanitize(t3);
+                    
+                    if (t3 == "LSL" || t3 == "LSR") {
+                        // SCENARIO A: "STR X0, X1, LSL #3" (2 operands + shift)
+                        // This means the destination (X0) is also the first source register
+                        instr.arg2 = instr.arg1; 
+                        
+                        // Parse X1 as source 2
+                        if (addrStr[0] == 'X' || addrStr == "SP") {
+                            instr.arg3.type = OperandType::REGISTER;
+                            instr.arg3.reg = addrStr;
+                        } else {
+                            instr.arg3.type = OperandType::IMMEDIATE;
+                            instr.arg3.imm = stoull(addrStr, nullptr, 0);
+                        }
+                        
+                        // t3 is the shift type, read the next token for the shift amount
+                        instr.shiftType = t3;
+                        lineStream >> t5;
+                        instr.shiftImm = stoull(sanitize(t5), nullptr, 0);
+                        
+                    } else {
+                        // SCENARIO B: "ADD X0, X1, X2..." or "ADD X0, X1, #5..." (3 operands)
+                        // Parse operandStr as source 1
+                        if (addrStr[0] == 'X' || addrStr == "SP") {
+                            instr.arg2.type = OperandType::REGISTER;
+                            instr.arg2.reg = addrStr;
+                        } else {
+                            instr.arg2.type = OperandType::IMMEDIATE;
+                            instr.arg2.imm = stoull(addrStr, nullptr, 0);
+                        }
+                        
+                        // Parse t3 as source 2
+                        if (t3[0] == 'X' || t3 == "SP") { 
+                            instr.arg3.type = OperandType::REGISTER;
+                            instr.arg3.reg = t3; 
+                        } else { 
+                            instr.arg3.type = OperandType::IMMEDIATE;
+                            instr.arg3.imm = stoull(t3, nullptr, 0); 
+                        } 
+                        
+                        // Check if there is an optional shift after the 3rd operand (e.g., ADD X0, X1, X2, LSL #3)
+                        if (lineStream >> t4 >> t5) {
+                            instr.shiftType = sanitize(t4);
+                            instr.shiftImm = stoull(sanitize(t5), nullptr, 0);
+                        } else {
+                            instr.shiftType = "";
+                            instr.shiftImm = 0;
+                        }
+                    }
+                } else {
+                    // SCENARIO C: Basic 2-operand instruction with no shift (e.g., "ADD X0, #5")
+                    // This defaults to X0 = X0 + 5
+                    instr.arg2 = instr.arg1; 
+                    
+                    if (addrStr[0] == 'X' || addrStr == "SP") {
+                        instr.arg3.type = OperandType::REGISTER;
+                        instr.arg3.reg = addrStr;
+                    } else {
+                        instr.arg3.type = OperandType::IMMEDIATE;
+                        instr.arg3.imm = stoull(addrStr, nullptr, 0);
+                    }
+                    instr.shiftType = "";
+                    instr.shiftImm = 0;
                 }
+                
                 break;
             }
             // Both take a register followed by a register or an immediate
@@ -277,11 +341,45 @@ private:
             }
             // Takes a label
             case Opcode::B: {
+
+                if(opcodeStr[1] == '.'){
+                    string comparison = opcodeStr.substr(2);
+                    instr.cmpType = comparison;
+
+                }else{
+                    instr.cmpType = "";
+                }
+
                 string labelStr;
                 lineStream >> labelStr;
                 labelStr = sanitize(labelStr);
                 instr.arg1.type = OperandType::LABEL;
                 instr.arg1.label = labelStr;
+                break;
+            }
+            case Opcode::CMP:{
+                string regStr, operandStr, t3, t4;
+                lineStream >> regStr >> operandStr;
+                regStr = sanitize(regStr);
+                operandStr = sanitize(operandStr);
+                instr.arg1.reg = regStr;
+
+                 if (!operandStr.empty() && operandStr[0] == 'X' || operandStr == "SP") {
+                    instr.arg2.type = OperandType::REGISTER;
+                    instr.arg2.reg = operandStr;
+                } else {
+                    instr.arg2.type = OperandType::IMMEDIATE;
+                    instr.arg2.imm = stoull(operandStr, nullptr, 0);
+                }
+
+                if (lineStream >> t3 >> t4) {
+                    instr.shiftType = sanitize(t3);
+                    instr.shiftImm = stoull(sanitize(t4), nullptr, 0);
+                } else {
+                    instr.shiftType = "";
+                    instr.shiftImm = 0;
+                }
+
                 break;
             }
             // Takes a starting and ending memory index, each either a register (indirect) or an immediate
@@ -378,22 +476,28 @@ class CPU {
         void execute(const Instruction& instr) {
             // run each insrutction, this gets looped
             switch (instr.op) {
-                case Opcode::LDR: {
-                // sets the register in arg1 to the memory at the address in arg2 (register or immediate)
-                    int addr = (instr.arg2.type == OperandType::REGISTER)
-                        ? registers.get(instr.arg2.reg)
-                        : instr.arg2.imm;
-                    registers.set(instr.arg1.reg, memory.read(addr));
-                    break;
-                }
-
+                case Opcode::LDR:
                 case Opcode::STR: {
                 // same as LDR but saves into memory
-                    int addr = (instr.arg2.type == OperandType::REGISTER)
-                        ? registers.get(instr.arg2.reg)
-                        : instr.arg2.imm;
-                    
-                    memory.write(addr, registers.get(instr.arg1.reg));
+                    // ldr x0, [sp, #3]
+                    uint64_t source1 = 0;
+                    uint64_t source2 = 0;
+                    if(instr.arg3.type == OperandType::NONE){
+                        source1 = (instr.arg2.type == OperandType::REGISTER) ? registers.get(instr.arg2.reg) : instr.arg2.imm;
+                    }else{
+                        source1 = (instr.arg2.type == OperandType::REGISTER) ? registers.get(instr.arg2.reg) : instr.arg2.imm;
+                        source2 = (instr.arg3.type == OperandType::REGISTER) ? registers.get(instr.arg3.reg) : instr.arg3.imm;
+                    }
+
+                    if (instr.shiftType == "LSL") {
+                        source2 <<= instr.shiftImm;
+                    } else if (instr.shiftType == "LSR") {
+                        source2 >>= instr.shiftImm;
+                    }
+
+                    uint64_t addr = source1 + source2;
+                    instr.op == Opcode::STR ? memory.write(addr, registers.get(instr.arg1.reg)): registers.set(instr.arg1.reg, memory.read(addr));
+
                     break;
                 }
 
@@ -466,8 +570,30 @@ class CPU {
 
                 case Opcode::B:
                 // jumps pc to the resolved target of the branch
-                    pc = instr.arg1.resolvedTarget;
+                    
+                    if(instr.cmpType == "LT"){
+                        if(carryFlag  == true){
+                            pc = instr.arg1.resolvedTarget;
+                        }
+                    }else if(instr.cmpType == "GT"){
+                        if(carryFlag == false && zeroFlag == false){
+                            pc = instr.arg1.resolvedTarget;
+                        }
+                    }else{
+                        pc = instr.arg1.resolvedTarget;
+                    }
                     break;
+
+                case Opcode::CMP:{
+                    int64_t digit1 = registers.get(instr.arg1.reg);
+                    int64_t digit2 = (instr.arg2.type == OperandType::REGISTER) ? registers.get(instr.arg2.reg) : instr.arg2.imm;
+
+                    digit1 - digit2 == 0 ? zeroFlag = true : zeroFlag = false;
+                    digit1 - digit2 >= 0 ? carryFlag = false : carryFlag = true;
+
+                    break;
+                }
+                    
 
                 case Opcode::DUMP: {
                 // dumps (prints) the memory from index (arg1) to index (arg2), each register or immediate
@@ -486,6 +612,7 @@ class CPU {
                     break;
                 }
 
+
                 case Opcode::HLT:
                 // stops the program
                     running = false;
@@ -501,7 +628,9 @@ class CPU {
         Memory memory;
         int pc = 0;
         bool running = true;
-
+        // ZF CF 
+        bool zeroFlag = false; // if result = 0 (equal)
+        bool carryFlag = false; // if A < B -> true (if B has a carry over)
 
     public:
         void run(const Program& program) {

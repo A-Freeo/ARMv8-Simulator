@@ -5,8 +5,24 @@ MOVK X0, 0xeeff, LSL #16
 MOVK X0, 0xccdd, LSL #32
 MOVK X0, 0x7abb, LSL #48
 
-STR X0, SP
+STR X0, [SP, #4]
+MOV X0, SP
 
-DUMP SP
+ADD X0, SP, #4
 
+DUMP X0
+
+MOVZ X0, #3
+MOVZ X1, #4
+
+CMP X1, X0
+B.GT true
+
+HLT
+
+true:
+MOV X0, SP
+ADD X0, SP, #4
+
+DUMP X0
 HLT
