@@ -21,6 +21,8 @@ B.GT true
 HLT
 
 true:
+PRINT X1
+PRINT X0
 MOV X0, SP
 ADD X0, SP, #4
 
