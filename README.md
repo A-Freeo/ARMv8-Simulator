@@ -8,6 +8,7 @@ A simulator for a simplified AArch64 (ARMv8) instruction set, written in C++. A 
 - **Memory**: a byte-addressable array, read/written 8 bytes at a time.
 - **Program counter**: advances one instruction at a time; branches jump by resolving labels to instruction indices at parse time.
 - **Flags**: `CMP` sets zero/carry flags, which conditional branches (`B.LT`, `B.GT`) check.
+- **Syntax**: operands must be comma-separated like real ARMv8 assembly (e.g. `MOV X0, X1`, not `MOV X0 X1`) — this is enforced, not just cosmetic.
 
 ## Supported instructions
 
@@ -54,10 +55,9 @@ Counts down from 10 to 1, printing each value.
 ## Some constraints
 
 - Registers aren't limited to a real X0-X30 range — any name is accepted, so a typo'd register name just silently creates a new one instead of erroring.
-- Memory is only 64 bytes, and reads/writes aren't bounds-checked — an address near the end of memory can read or write past the array.
-- Memory reads/writes are fixed at 8 bytes — there's no W-register equivalent, or narrower loads/stores like `LDRB`/`LDRH`.
+- Memory is only 64 bytes, and reads/writes are fixed at 8 bytes — there's no W-register equivalent, or narrower loads/stores like `LDRB`/`LDRH`. Out-of-bounds accesses fail with a clean error rather than corrupting memory.
 - Only `B.LT` and `B.GT` exist as conditional branches; any other `B.cond` suffix (e.g. `B.EQ`) currently falls back to an unconditional branch instead of checking flags.
 - Arithmetic doesn't track overflow — `ADD`/`SUB` just wrap on overflow like normal unsigned integers, with no flag set.
 - The script file is hardcoded in `main()` (currently `script2.txt`) rather than taken as a command-line argument.
-- Parsing is minimal — a malformed or incomplete instruction line can crash the program (e.g. via an uncaught `stoi`/`stoull` exception) rather than reporting a clean parse error.
-- `MOVK`'s second operand is currently allowed to be a register (e.g. `MOVK X0, X1`), but real ARMv8 `MOVK` only ever takes an immediate — this should be restricted to immediates only. 
+- A missing or malformed operand now fails with a clean error instead of crashing, but parsing is still minimal overall — not every malformed line is caught.
+- `MOVK`'s second operand is currently allowed to be a register (e.g. `MOVK X0, X1`), but real ARMv8 `MOVK` only ever takes an immediate — this should be restricted to immediates only.

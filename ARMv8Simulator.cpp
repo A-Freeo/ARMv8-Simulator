@@ -102,7 +102,7 @@ private:
             // Both take a register followed by an address, either a register or an immediate (immediate must represent a memory address). In addition also a shift operator
             case Opcode::LDR:
             case Opcode::STR: {
-                string regStr, addrStr, t3, t4, t5;
+                string regStr, addrStr, thirdTokenStr, shiftKeywordStr, shiftAmountStr;
                 lineStream >> regStr >> addrStr;
 
                 requireComma(regStr);
@@ -113,12 +113,12 @@ private:
                 instr.arg1.type = OperandType::REGISTER;
                 instr.arg1.reg = regStr;
 
-                if (lineStream >> t3) {
+                if (lineStream >> thirdTokenStr) {
                     requireComma(addrStrRaw);
-                    string t3Raw = t3;
-                    t3 = sanitize(t3);
+                    string thirdTokenStrRaw = thirdTokenStr;
+                    thirdTokenStr = sanitize(thirdTokenStr);
 
-                    if (t3 == "LSL" || t3 == "LSR") {
+                    if (thirdTokenStr == "LSL" || thirdTokenStr == "LSR") {
                         // SCENARIO A: "STR X0, X1, LSL #3" (2 operands + shift)
                         // This means the destination (X0) is also the first source register
                         instr.arg2 = instr.arg1;
@@ -132,10 +132,10 @@ private:
                             instr.arg3.imm = parseImmediate(addrStr);
                         }
 
-                        // t3 is the shift type, read the next token for the shift amount
-                        instr.shiftType = t3;
-                        lineStream >> t5;
-                        instr.shiftImm = parseImmediate(sanitize(t5));
+                        // thirdTokenStr is the shift type, read the next token for the shift amount
+                        instr.shiftType = thirdTokenStr;
+                        lineStream >> shiftAmountStr;
+                        instr.shiftImm = parseImmediate(sanitize(shiftAmountStr));
 
                     } else {
                         // SCENARIO B: "ADD X0, X1, X2..." or "ADD X0, X1, #5..." (3 operands)
@@ -148,20 +148,20 @@ private:
                             instr.arg2.imm = parseImmediate(addrStr);
                         }
 
-                        // Parse t3 as source 2
-                        if (t3[0] == 'X' || t3 == "SP") {
+                        // Parse thirdTokenStr as source 2
+                        if (thirdTokenStr[0] == 'X' || thirdTokenStr == "SP") {
                             instr.arg3.type = OperandType::REGISTER;
-                            instr.arg3.reg = t3;
+                            instr.arg3.reg = thirdTokenStr;
                         } else {
                             instr.arg3.type = OperandType::IMMEDIATE;
-                            instr.arg3.imm = parseImmediate(t3);
+                            instr.arg3.imm = parseImmediate(thirdTokenStr);
                         }
 
                         // Check if there is an optional shift after the 3rd operand (e.g., ADD X0, X1, X2, LSL #3)
-                        if (lineStream >> t4 >> t5) {
-                            requireComma(t3Raw);
-                            instr.shiftType = sanitize(t4);
-                            instr.shiftImm = parseImmediate(sanitize(t5));
+                        if (lineStream >> shiftKeywordStr >> shiftAmountStr) {
+                            requireComma(thirdTokenStrRaw);
+                            instr.shiftType = sanitize(shiftKeywordStr);
+                            instr.shiftImm = parseImmediate(sanitize(shiftAmountStr));
                         } else {
                             instr.shiftType = "";
                             instr.shiftImm = 0;
@@ -187,58 +187,58 @@ private:
             // Both takes a register and a register/immediate. In addition also a shift operator
             case Opcode::ADD:
             case Opcode::SUB: {
-                string regStr, operandStr, t3, t4, t5;
-                lineStream >> regStr >> operandStr;
+                string destStr, srcStr, thirdTokenStr, shiftKeywordStr, shiftAmountStr;
+                lineStream >> destStr >> srcStr;
 
-                requireComma(regStr);
-                regStr = sanitize(regStr);
-                string operandStrRaw = operandStr;
-                operandStr = sanitize(operandStr);
+                requireComma(destStr);
+                destStr = sanitize(destStr);
+                string srcStrRaw = srcStr;
+                srcStr = sanitize(srcStr);
 
                 instr.arg1.type = OperandType::REGISTER;
-                instr.arg1.reg = regStr;
+                instr.arg1.reg = destStr;
 
-                if (lineStream >> t3) {
-                    requireComma(operandStrRaw);
-                    string t3Raw = t3;
-                    t3 = sanitize(t3);
+                if (lineStream >> thirdTokenStr) {
+                    requireComma(srcStrRaw);
+                    string thirdTokenStrRaw = thirdTokenStr;
+                    thirdTokenStr = sanitize(thirdTokenStr);
 
-                    if (t3 == "LSL" || t3 == "LSR") {
+                    if (thirdTokenStr == "LSL" || thirdTokenStr == "LSR") {
                         instr.arg2 = instr.arg1;
 
-                        if (operandStr[0] == 'X' || operandStr == "SP") {
+                        if (srcStr[0] == 'X' || srcStr == "SP") {
                             instr.arg3.type = OperandType::REGISTER;
-                            instr.arg3.reg = operandStr;
+                            instr.arg3.reg = srcStr;
                         } else {
                             instr.arg3.type = OperandType::IMMEDIATE;
-                            instr.arg3.imm = parseImmediate(operandStr);
+                            instr.arg3.imm = parseImmediate(srcStr);
                         }
 
-                        instr.shiftType = t3;
-                        lineStream >> t5;
-                        instr.shiftImm = parseImmediate(sanitize(t5));
+                        instr.shiftType = thirdTokenStr;
+                        lineStream >> shiftAmountStr;
+                        instr.shiftImm = parseImmediate(sanitize(shiftAmountStr));
 
                     } else {
-                        if (operandStr[0] == 'X' || operandStr == "SP") {
+                        if (srcStr[0] == 'X' || srcStr == "SP") {
                             instr.arg2.type = OperandType::REGISTER;
-                            instr.arg2.reg = operandStr;
+                            instr.arg2.reg = srcStr;
                         } else {
                             instr.arg2.type = OperandType::IMMEDIATE;
-                            instr.arg2.imm = parseImmediate(operandStr);
+                            instr.arg2.imm = parseImmediate(srcStr);
                         }
 
-                        if (t3[0] == 'X' || t3 == "SP") {
+                        if (thirdTokenStr[0] == 'X' || thirdTokenStr == "SP") {
                             instr.arg3.type = OperandType::REGISTER;
-                            instr.arg3.reg = t3;
+                            instr.arg3.reg = thirdTokenStr;
                         } else {
                             instr.arg3.type = OperandType::IMMEDIATE;
-                            instr.arg3.imm = parseImmediate(t3);
+                            instr.arg3.imm = parseImmediate(thirdTokenStr);
                         }
 
-                        if (lineStream >> t4 >> t5) {
-                            requireComma(t3Raw);
-                            instr.shiftType = sanitize(t4);
-                            instr.shiftImm = parseImmediate(sanitize(t5));
+                        if (lineStream >> shiftKeywordStr >> shiftAmountStr) {
+                            requireComma(thirdTokenStrRaw);
+                            instr.shiftType = sanitize(shiftKeywordStr);
+                            instr.shiftImm = parseImmediate(sanitize(shiftAmountStr));
                         } else {
                             instr.shiftType = "";
                             instr.shiftImm = 0;
@@ -247,12 +247,12 @@ private:
                 } else {
                     instr.arg2 = instr.arg1;
 
-                    if (operandStr[0] == 'X' || operandStr == "SP") {
+                    if (srcStr[0] == 'X' || srcStr == "SP") {
                         instr.arg3.type = OperandType::REGISTER;
-                        instr.arg3.reg = operandStr;
+                        instr.arg3.reg = srcStr;
                     } else {
                         instr.arg3.type = OperandType::IMMEDIATE;
-                        instr.arg3.imm = parseImmediate(operandStr);
+                        instr.arg3.imm = parseImmediate(srcStr);
                     }
                     instr.shiftType = "";
                     instr.shiftImm = 0;
@@ -286,7 +286,7 @@ private:
             }
             // Similar to move but has option to take a shift operator
             case Opcode::MOVK: {
-                string destStr, srcStr, t3, t4;
+                string destStr, srcStr, shiftKeywordStr, shiftAmountStr;
                 lineStream >> destStr >> srcStr;
                 requireComma(destStr);
                 destStr = sanitize(destStr);
@@ -302,14 +302,13 @@ private:
                     instr.arg2.type = OperandType::IMMEDIATE;
                     instr.arg2.imm = parseImmediate(srcStr);
                 }
-                if(lineStream >> t3 >> t4){
+                if(lineStream >> shiftKeywordStr >> shiftAmountStr){
                     requireComma(srcStrRaw);
-                    t3 = sanitize(t3);
-                    t4 = sanitize(t4);
-                    if(t3 == "LSL" || t3 == "LSR"){
-                        instr.shiftType = t3;
-                        t4 = sanitize(t4);
-                        instr.shiftImm = parseImmediate(t4);
+                    shiftKeywordStr = sanitize(shiftKeywordStr);
+                    shiftAmountStr = sanitize(shiftAmountStr);
+                    if(shiftKeywordStr == "LSL" || shiftKeywordStr == "LSR"){
+                        instr.shiftType = shiftKeywordStr;
+                        instr.shiftImm = parseImmediate(shiftAmountStr);
                     }
                 }
                 break;
@@ -359,28 +358,28 @@ private:
             }
             // Takes a register and a register/immediate
             case Opcode::CMP:{
-                string regStr, operandStr, t3, t4;
-                lineStream >> regStr >> operandStr;
+                string lhsStr, rhsStr, shiftKeywordStr, shiftAmountStr;
+                lineStream >> lhsStr >> rhsStr;
 
-                requireComma(regStr);
-                regStr = sanitize(regStr);
-                string operandStrRaw = operandStr;
-                operandStr = sanitize(operandStr);
+                requireComma(lhsStr);
+                lhsStr = sanitize(lhsStr);
+                string rhsStrRaw = rhsStr;
+                rhsStr = sanitize(rhsStr);
                 instr.arg1.type = OperandType::REGISTER;
-                instr.arg1.reg = regStr;
+                instr.arg1.reg = lhsStr;
 
-                 if (!operandStr.empty() && operandStr[0] == 'X' || operandStr == "SP") {
+                 if (!rhsStr.empty() && rhsStr[0] == 'X' || rhsStr == "SP") {
                     instr.arg2.type = OperandType::REGISTER;
-                    instr.arg2.reg = operandStr;
+                    instr.arg2.reg = rhsStr;
                 } else {
                     instr.arg2.type = OperandType::IMMEDIATE;
-                    instr.arg2.imm = parseImmediate(operandStr);
+                    instr.arg2.imm = parseImmediate(rhsStr);
                 }
 
-                if (lineStream >> t3 >> t4) {
-                    requireComma(operandStrRaw);
-                    instr.shiftType = sanitize(t3);
-                    instr.shiftImm = parseImmediate(sanitize(t4));
+                if (lineStream >> shiftKeywordStr >> shiftAmountStr) {
+                    requireComma(rhsStrRaw);
+                    instr.shiftType = sanitize(shiftKeywordStr);
+                    instr.shiftImm = parseImmediate(sanitize(shiftAmountStr));
                 } else {
                     instr.shiftType = "";
                     instr.shiftImm = 0;
@@ -510,22 +509,22 @@ class CPU {
                 // Loads from or stores to memory, taking in and checking operand types + shift type/value
                 case Opcode::LDR:
                 case Opcode::STR: {
-                    uint64_t source1 = 0;
-                    uint64_t source2 = 0;
+                    uint64_t base = 0;
+                    uint64_t offset = 0;
 
                     if(instr.arg3.type == OperandType::NONE){
-                        source1 = (instr.arg2.type == OperandType::REGISTER) ? registers.get(instr.arg2.reg) : instr.arg2.imm;
+                        base = (instr.arg2.type == OperandType::REGISTER) ? registers.get(instr.arg2.reg) : instr.arg2.imm;
                     }else{
-                        source1 = (instr.arg2.type == OperandType::REGISTER) ? registers.get(instr.arg2.reg) : instr.arg2.imm;
-                        source2 = (instr.arg3.type == OperandType::REGISTER) ? registers.get(instr.arg3.reg) : instr.arg3.imm;
+                        base = (instr.arg2.type == OperandType::REGISTER) ? registers.get(instr.arg2.reg) : instr.arg2.imm;
+                        offset = (instr.arg3.type == OperandType::REGISTER) ? registers.get(instr.arg3.reg) : instr.arg3.imm;
                     }
                     if (instr.shiftType == "LSL") {
-                        source2 <<= instr.shiftImm;
+                        offset <<= instr.shiftImm;
                     } else if (instr.shiftType == "LSR") {
-                        source2 >>= instr.shiftImm;
+                        offset >>= instr.shiftImm;
                     }
 
-                    uint64_t addr = source1 + source2;
+                    uint64_t addr = base + offset;
                     instr.op == Opcode::STR ? memory.write(addr, registers.get(instr.arg1.reg)): registers.set(instr.arg1.reg, memory.read(addr));
                     break;
                 }
@@ -534,28 +533,28 @@ class CPU {
                 case Opcode::ADD:
                 case Opcode::SUB: {
                     string rd = instr.arg1.reg;
-                    uint64_t source1 = 0;
-                    uint64_t source2 = 0;
+                    uint64_t lhs = 0;
+                    uint64_t rhs = 0;
 
 
                     if(instr.arg3.type == OperandType::NONE){
-                        source1 = registers.get(rd);
-                        source2 = (instr.arg2.type == OperandType::REGISTER) ? registers.get(instr.arg2.reg) : instr.arg2.imm;
+                        lhs = registers.get(rd);
+                        rhs = (instr.arg2.type == OperandType::REGISTER) ? registers.get(instr.arg2.reg) : instr.arg2.imm;
                     }else{
-                        source1 = (instr.arg2.type == OperandType::REGISTER) ? registers.get(instr.arg2.reg) : instr.arg2.imm;
-                        source2 = (instr.arg3.type == OperandType::REGISTER) ? registers.get(instr.arg3.reg) : instr.arg3.imm;
+                        lhs = (instr.arg2.type == OperandType::REGISTER) ? registers.get(instr.arg2.reg) : instr.arg2.imm;
+                        rhs = (instr.arg3.type == OperandType::REGISTER) ? registers.get(instr.arg3.reg) : instr.arg3.imm;
                     }
 
                     if (instr.shiftType == "LSL") {
-                        source2 <<= instr.shiftImm;
+                        rhs <<= instr.shiftImm;
                     } else if (instr.shiftType == "LSR") {
-                        source2 >>= instr.shiftImm;
+                        rhs >>= instr.shiftImm;
                     }
 
                     if (instr.op == Opcode::ADD) {
-                        registers.set(rd, source1 + source2);
+                        registers.set(rd, lhs + rhs);
                     } else {
-                        registers.set(rd, source1 - source2);
+                        registers.set(rd, lhs - rhs);
                     }
                     break;
                 }
@@ -615,11 +614,11 @@ class CPU {
 
                 // Compares values of registers or a register and a immediate and set CPU flags for branch comparisions
                 case Opcode::CMP:{
-                    int64_t digit1 = registers.get(instr.arg1.reg);
-                    int64_t digit2 = (instr.arg2.type == OperandType::REGISTER) ? registers.get(instr.arg2.reg) : instr.arg2.imm;
+                    int64_t lhs = registers.get(instr.arg1.reg);
+                    int64_t rhs = (instr.arg2.type == OperandType::REGISTER) ? registers.get(instr.arg2.reg) : instr.arg2.imm;
 
-                    digit1 - digit2 == 0 ? zeroFlag = true : zeroFlag = false;
-                    digit1 - digit2 >= 0 ? carryFlag = false : carryFlag = true;
+                    lhs - rhs == 0 ? zeroFlag = true : zeroFlag = false;
+                    lhs - rhs >= 0 ? carryFlag = false : carryFlag = true;
 
                     break;
                 }
